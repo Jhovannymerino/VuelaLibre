@@ -82,7 +82,11 @@ function openDialog(mode) {
   const dialog = root.querySelector("dialog");
   dialog.querySelector(".close-button").onclick = () => dialog.close();
   dialog.addEventListener("close", () => {
+    const needsFocus =
+      document.activeElement === document.body ||
+      root.contains(document.activeElement);
     root.innerHTML = "";
+    if (!needsFocus) return;
     if (opener?.isConnected) opener.focus();
     else document.querySelector("#main").focus();
   });
