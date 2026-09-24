@@ -1,0 +1,34 @@
+# Radar de disponibilidad estimada para Air Europa
+
+Propuesta experimental del 24 de septiembre de 2026. Objetivo: responder por vuelo UX y fecha «¿hay indicios de que queden más de X plazas?» aunque no exista acceso a la carga staff. El umbral X lo elige la persona. La señal comercial puede ayudar a ordenar alternativas, pero no equivale a asientos físicos ni a una probabilidad de embarcar.
+
+## Fuentes y lectura correcta
+
+1. **Inventario vendible por clase**, señal principal. Consultar [Amadeus Flight Availabilities](https://amadeus4dev.github.io/developer-guides/resources/flights/#search-for-flight-and-fare-availability) en producción para ruta, fecha y número de vuelo; conservar operador real UX, cabina, clase y contador. Si alguna clase devuelve 6, hay indicio de que **se pueden vender 6 billetes en esa clase ahora**; si devuelve 9, el dato es «9 o más». No sumar las clases. Si no aparece el vuelo, registrar «sin cobertura», nunca «0 plazas».
+2. **Prueba de grupo**, confirmación comercial opcional. Cotizar 1, 2, 4 y hasta 9 adultos en el **mismo vuelo directo**, verificando con [Flight Offers Price](https://amadeus4dev.github.io/developer-guides/resources/flights/#confirm-fares) que la oferta sigue disponible. Que se pueda cotizar un grupo de X+1 refuerza la señal de inventario vendible superior a X. No equivale a X+1 asientos físicamente vacíos: [IATA documenta la sobreventa](https://www.iata.org/contentassets/2e46aace261040b9a47fb7b9da18efc9/overbooking.pdf). Repetir esta prueba consume consultas y puede tener límites comerciales, por lo que sería selectiva, no para cada vuelo cada hora.
+3. **Precio comparable**, señal secundaria. Guardar la tarifa final para **un pasajero**, mismo trayecto, cabina, moneda, canal, equipaje y antelación; compararla con otros vuelos UX del mismo trayecto y con el histórico de ese vuelo a igual antelación. El precio bruto medio de un lunes frente a un sábado mezcla demanda, horario, temporada, reglas de tarifa y tiempo hasta salida. [IATA describe la apertura y cierre de clases](https://www.iata.org/en/publications/newsletters/iata-knowledge-hub/revenue-management-the-heartbeat-of-aviation/); [este estudio con tarifas y disponibilidad](https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/micropaper17/micro0323.pdf) encuentra tanto discriminación por tiempo como reacción a la demanda. Por ello, una tarifa alta **no demuestra** que el avión vaya lleno.
+4. **Serie temporal y vuelos alternativos.** Capturar lecturas para el mismo vuelo a intervalos diarios, y más cerca de la salida con mayor frecuencia. Comparar la variación del máximo de cupos por clase con otros vuelos UX en esa ruta/fecha; una caída de 9+ a 4 es una señal más informativa que el día de la semana por sí solo. Guardar `observedAt` y no interpretar un cambio como venta confirmada: puede ser una decisión de control de inventario.
+5. **Mapa de asientos**, solo comprobación secundaria si viene junto a una oferta. La [FAQ de Amadeus](https://amadeus4dev.github.io/developer-guides/faq/) distingue asientos disponibles, bloqueados y ocupados, y explica que pueden no mostrarse para ciertos vuelos. Un asiento sin selección no identifica de forma fiable a un pasajero sin asiento asignado. No convertir píxeles del mapa en plazas libres.
+
+## Resultado que mostraría el producto
+
+Para X entre 0 y 8: «**Señal comercial favorable para más de X**» cuando una clase o una cotización confirmada indique X+1 o más vendibles; junto a la fecha de lectura, valor `9+` cuando esté truncado y tendencia. Si el máximo observado es X o menor: «**No hay evidencia comercial de más de X**»; no afirmar que el vuelo esté lleno. Cuando el vuelo no aparezca: «**Sin datos de este vuelo**». El precio relativo se muestra como contexto («tarifa 18 % por encima de vuelos comparables»), no como causa ni porcentaje de ocupación. `src/domain/market-signal.js` codifica la interpretación pura de estas lecturas y evita sumar clases o convertir precio en probabilidad.
+
+Para mostrar «probabilidad de que queden más de X asientos al cierre» con un porcentaje, hace falta una muestra de entrenamiento: guardar cada señal antes de salida y una observación posterior de la **carga real** del mismo vuelo obtenida de forma autorizada. Agrupar por ruta, cabina, días hasta salida, cupos, tendencia y precio relativo; entrenar y validar fuera de muestra (por fechas posteriores, sin mezclar snapshots del mismo vuelo entre entrenamiento y prueba). Publicar porcentajes solo si la predicción está calibrada y acompañada de tamaño de muestra e intervalo de incertidumbre. Sin etiquetas reales, un 70 % sería un número inventado. También habría que separar «quedan >X plazas» de «embarco como staff», que depende de condiciones adicionales.
+
+## Plan técnico de adquisición
+
+1. Crear una cuenta **de la aplicación** en [Amadeus Self-Service](https://amadeus4dev.github.io/developer-guides/faq/) y probar Flight Availabilities, Flight Offers Search y Pricing para varios vuelos UX conocidos. No hace falta credencial de empleado de Air Europa. Las claves deben permanecer en un servidor, nunca en el navegador. [El entorno test devuelve datos en caché](https://amadeus4dev.github.io/developer-guides/test-data/), así que las tendencias deben validarse en producción.
+2. Si hay cobertura UX, un recolector programado consulta solo vuelos y fechas seguidos, normaliza `operatingCarrier`, número, ruta, fecha, cabina, clase, cupo, tarifa y hora; guarda snapshots inmutables. El dashboard lee esa base y calcula la señal para el X seleccionado. Presupuesto y frecuencia de llamadas se fijan tras comprobar límites y coste de producción.
+3. Piloto con vuelos UX observados durante varias semanas: comprobar porcentaje de vuelos encontrados, consistencia de operador/código compartido, frecuencia de lectura, cuántas veces cambia la señal y si el precio aporta información adicional al cupo. Una pequeña muestra voluntaria de cargas reales permitiría validar la clasificación antes de ofrecer probabilidades numéricas.
+
+No hay claves Amadeus ni datos vivos en este repositorio. La demo actual permanece como ejemplo de recuentos reportados; no se le asigna este radar comercial como si procediera de una API.
+
+Como prueba reproducible de cobertura, `scripts/probe-amadeus.mjs` hace OAuth y consulta la API oficial desde Node, filtra vuelo UX directo y devuelve una observación JSON con el umbral X. Se ejecuta así tras configurar claves de una aplicación Amadeus:
+
+```bash
+AMADEUS_CLIENT_ID=... AMADEUS_CLIENT_SECRET=... AMADEUS_ENV=production \
+  node scripts/probe-amadeus.mjs UX1234 2026-10-15 MAD PMI 5
+```
+
+Por defecto usa el entorno de prueba y rotula `amadeus-test-cache`; la ausencia del vuelo produce `flight: null` y señal `unknown`. El comando no imprime las claves ni afirma que un vuelo esté lleno cuando la API no lo devuelve. En producción deben confirmarse cobertura, permisos y límites antes de programar consultas.
