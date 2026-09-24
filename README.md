@@ -25,9 +25,11 @@ npm run check
 
 ## Fuentes investigadas
 
-- [StaffTraveler](https://stafftraveler.com/en) publica cargas específicas para viajes staff y tiene [actualizaciones periódicas de solicitudes](https://blog.stafftraveler.com/stafftraveler/introducing-auto-updates/) dentro de su producto. No se encontró una API pública documentada para alimentarlo automáticamente desde este repositorio. Es la vía más cercana para una futura colaboración/licencia de datos.
+La [investigación de procedencia](Docs/architecture/origen-de-datos.md) describe **de qué sistema sale cada número**, sus límites y las dos vías concretas para el piloto UX. La distinción clave es entre carga real reportada por personas con acceso autorizado e inventario comercial del GDS.
+
+- [StaffTraveler](https://support.stafftraveler.com/en/help/responding-to-requests) recibe cargas introducidas por miembros con acceso a los sistemas de su aerolínea. Sus [actualizaciones periódicas](https://blog.stafftraveler.com/stafftraveler/introducing-auto-updates/) son nuevas solicitudes a esos miembros, no un feed público. No se encontró API pública documentada para consumir las cargas; una integración requiere acuerdo o colaboradores propios autorizados.
 - [Air Europa Direct NDC](https://direct2.aireuropa.com/es/es/b2b/home.html) ofrece API para agencias, con registro. Su objetivo es la venta; no publica un recuento de plazas disponibles para staff.
-- [Amadeus Flight Availabilities](https://www.postman.com/amadeus4dev/amadeus-for-developers-s-public-workspace/request/o5uji5m/flight-availabilities-search) indica plazas **a la venta** por clase tarifaria. No son plazas libres físicas ni elegibilidad staff. Su [FAQ](https://admin.developers.amadeus.com/self-service/apis-docs/guides/developer-guides/faq/) explica también las limitaciones del inventario y de los mapas.
+- [Amadeus Flight Availabilities](https://amadeus4dev.github.io/developer-guides/resources/flights/#search-for-flight-and-fare-availability) indica plazas **a la venta** por clase tarifaria, con un máximo visible de **9+**. No son plazas libres físicas ni elegibilidad staff; las clases no se pueden sumar.
 - [OAG Seats Data](https://www.oag.com/flight-data-seats) informa capacidad instalada/predicha del avión; capacidad no equivale a plazas vacías de un vuelo concreto.
 
 No hay una conexión de vuelos instalada en este entorno que entregue el recuento requerido. Para automatizar el piloto hace falta un acuerdo/API que devuelva **número de vuelo, fecha, ruta, plazas libres reales y fecha de observación**. El adaptador `loadFlights` queda preparado para sustituirse una vez se disponga de esa fuente. No se usan datos de inventario comercial como si fueran plazas staff.

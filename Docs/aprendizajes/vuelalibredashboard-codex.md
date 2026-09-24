@@ -19,3 +19,7 @@ La primera entrega en `dashboard-mvp-uiux` interpretó el brief de mapas como co
 Una cifra de plazas observada puede ayudar a la persona a tomar una decisión, pero no basta para derivar una probabilidad calibrada de embarque. La credibilidad del producto depende primero de obtener **la fuente correcta**. El diseño no debe prometer automatización ni exactitud cuando no existe una conexión verificable.
 
 La entrega corregida se publica en la misma rama y PR. Las capturas están en `Docs/previews/`.
+
+## Investigación adicional: procedencia de las cifras
+
+El usuario aclaró que necesitaba saber **de dónde obtienen los datos** las aplicaciones existentes para reproducir el método. Se comprobó en documentación de cada proveedor que StaffTraveler recibe cargas introducidas por miembros con acceso a reservas, mientras que NonRevLoads y GetFlightLoads parten del inventario comercial del GDS. NonRevLoads admite expresamente que no conoce el número exacto de plazas libres ni la lista non-rev. La API oficial de Amadeus permite investigar una alternativa GDS sin credenciales de staff, pero sus valores son por clase tarifaria y están truncados en 9. Quedó documentado el plan y el contrato para separar ambas métricas en [origen-de-datos.md](../architecture/origen-de-datos.md). No se simuló una conexión ni se presentó el proxy como carga real.

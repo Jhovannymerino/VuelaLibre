@@ -44,7 +44,7 @@ La identidad de un vuelo debe incluir operador real, número, ruta y fecha; las 
 | Amadeus Flight Availabilities | Inventario para venta por clase                              | No equivale a plazas libres reales                               |
 | OAG Seats                     | Capacidad de asientos instalada/predicha                     | No indica ocupación actual                                       |
 
-Referencias directas en README. Una conexión útil debe cubrir Air Europa por vuelo y fecha, total libre, momento de lectura, cobertura y límites de reutilización. Antes de desplegar actualizaciones automáticas debe aclararse acceso, licencia, coste y frecuencia de consulta. No se ha verificado ninguna de estas condiciones para una integración en producción.
+El detalle de procedencia y los siguientes pasos están en [origen-de-datos.md](origen-de-datos.md). Una conexión útil para la cifra actual debe cubrir Air Europa por vuelo y fecha, total libre, momento de lectura, cobertura y límites de reutilización. El inventario GDS exige otra métrica y otra serie; su «9» significa al menos nueve asientos vendibles en una clase, no nueve asientos libres. Antes de desplegar actualizaciones automáticas debe aclararse acceso, licencia, coste y frecuencia de consulta. No se ha verificado ninguna de estas condiciones para una integración en producción.
 
 ## Cobertura
 
