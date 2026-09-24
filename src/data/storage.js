@@ -1,31 +1,18 @@
-const KEY = "vuelalibre:v1";
-const types = ["recommended", "together", "score", "signal"];
-export function readStore(storage = localStorage) {
+import { isValidFlight } from "../domain/availability.js";
+const KEY = "vuelalibre:availability-pilot:v1";
+export function readFlights(storage = localStorage) {
   try {
     const data = JSON.parse(storage.getItem(KEY));
-    return {
-      saved: data?.saved === true,
-      alerts: Array.isArray(data?.alerts)
-        ? data.alerts.filter(
-            (a) =>
-              typeof a.id === "string" &&
-              types.includes(a.type) &&
-              ["economy", "business"].includes(a.cabin),
-          )
-        : [],
-      preference: ["Ventana", "Pasillo", "Sin preferencia"].includes(
-        data?.preference,
-      )
-        ? data.preference
-        : "Ventana",
-    };
+    return Array.isArray(data)
+      ? data.filter((f) => f.source === "manual" && isValidFlight(f))
+      : [];
   } catch {
-    return { saved: false, alerts: [], preference: "Ventana" };
+    return [];
   }
 }
-export function saveStore(data, storage = localStorage) {
+export function saveFlights(flights, storage = localStorage) {
   try {
-    storage.setItem(KEY, JSON.stringify(data));
+    storage.setItem(KEY, JSON.stringify(flights));
     return true;
   } catch {
     return false;

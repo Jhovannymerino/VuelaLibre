@@ -1,120 +1,57 @@
-# VuelaLibre · Dashboard MVP
+# VuelaLibre · Piloto de disponibilidad Air Europa
 
-Un asistente de decisión precompra: interpreta un mapa de asientos, muestra las opciones disponibles y explica una única recomendación para el vuelo observado.
+La aplicación ahora responde a la pregunta real del viajero staff: **¿cuántas plazas libres se han reportado para un vuelo de Air Europa en una fecha y cómo ha cambiado ese número entre consultas?** La persona decide si compra su billete con ese contexto.
 
-**Estado:** MVP frontend funcional con datos simulados. No consulta aerolíneas, no reserva asientos, no predice tarifas y no envía notificaciones. Watchlist, alertas y preferencias se guardan exclusivamente en el navegador actual.
+**Estado del producto:** interfaz y seguimiento funcional con ejemplos ilustrativos y registros manuales. **Todavía no hay conexión a plazas reales de Air Europa.** La ruta MAD → PMI del 15 de octubre de 2026 incluye tres vuelos ficticios y cuatro observaciones por vuelo para revisar el diseño. Cualquier otra búsqueda empieza sin cifras. No se presentan los ejemplos como vuelos programados ni como cargas reales.
 
 ## Ejecutar
 
-Requiere Node.js **22.12 o superior** y npm.
+Requiere Node.js 22.12+.
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Abrir la URL que imprime Vite (por defecto http://localhost:5173). No se necesitan claves ni variables de entorno.
+Abrir la URL que indique Vite. La búsqueda filtra por origen, destino y fecha. Cada tarjeta muestra la cifra más reciente, cambio desde la consulta anterior, fecha de observación y enlace a un historial con evolución diaria. Se pueden registrar vuelos y nuevos recuentos en el navegador; al volver, se conservan. La demo no consulta datos en segundo plano.
 
 ```bash
-npm test                         # pruebas de cálculos y persistencia
-npm run build                    # genera dist/
-npm run preview                  # sirve el build localmente
-npx playwright install chromium  # primera ejecución de pruebas de navegador
-npm run test:e2e                 # flujos desktop y móvil
-npm run check                    # pruebas + build + navegador
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+npm run check
 ```
 
-En Linux sin dependencias de navegador: `npx playwright install --with-deps chromium`. La integración continua ejecuta la misma comprobación en cada push y PR.
+## Fuentes investigadas
 
-## Qué incluye
+- [StaffTraveler](https://stafftraveler.com/en) publica cargas específicas para viajes staff y tiene [actualizaciones periódicas de solicitudes](https://blog.stafftraveler.com/stafftraveler/introducing-auto-updates/) dentro de su producto. No se encontró una API pública documentada para alimentarlo automáticamente desde este repositorio. Es la vía más cercana para una futura colaboración/licencia de datos.
+- [Air Europa Direct NDC](https://direct2.aireuropa.com/es/es/b2b/home.html) ofrece API para agencias, con registro. Su objetivo es la venta; no publica un recuento de plazas disponibles para staff.
+- [Amadeus Flight Availabilities](https://www.postman.com/amadeus4dev/amadeus-for-developers-s-public-workspace/request/o5uji5m/flight-availabilities-search) indica plazas **a la venta** por clase tarifaria. No son plazas libres físicas ni elegibilidad staff. Su [FAQ](https://admin.developers.amadeus.com/self-service/apis-docs/guides/developer-guides/faq/) explica también las limitaciones del inventario y de los mapas.
+- [OAG Seats Data](https://www.oag.com/flight-data-seats) informa capacidad instalada/predicha del avión; capacidad no equivale a plazas vacías de un vuelo concreto.
 
-| Área            | Comportamiento implementado                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Header          | Iberia IB539, MAD → LIS, fecha, salida, avión ilustrativo, snapshot fechado; selector Economy/Business; fijo en desktop y compacto en móvil |
-| Decisión        | Estado aparente y una sola señal: Compra hoy / Puedes esperar / Vigilar; explicación y advertencias de interpretación                       |
-| Indicadores     | Ocupación, oportunidad, pares y triples, indicador de contigüidad, ventana/pasillo y señal operacional; deltas contra snapshot anterior     |
-| Mapa            | Disponible, ocupado aparente, bloqueado, premium, desconocido y contorno recomendado; leyenda específica por capa                           |
-| Capas           | Disponibilidad, calidad, parejas/grupos, precio simulado y recomendados; zoom y desplazamiento horizontal                                   |
-| Detalle         | Hover con descripción nativa; click, tap o teclado abre diálogo accesible con estado, tipo, precio y motivo                                 |
-| Estructura      | Galley, baños, mampara, salidas, alas, límites de cabina y notas de ruido/reclinación; representación ilustrativa                           |
-| Recomendaciones | Mejor individual, ventana, pasillo, calidad/precio, pareja y bloque de tres; enlaces al detalle                                             |
-| Historial       | Tres snapshots por cabina, tabla de evolución y minigráficos; datos de usuario invitado simulados                                           |
-| Watchlist       | Guardar/quitar vuelo con persistencia local                                                                                                 |
-| Alertas         | Cuatro condiciones de la spec, deduplicación por cabina y condición, eliminación y persistencia; sin ejecución automática                   |
-| Perfil          | Preferencia de asiento local; no se conecta a una cuenta ni cambia el ranking general                                                       |
-| Estados         | Skeleton, mapa vacío, fallo recuperable y confianza baja; selector de escenarios para revisión                                              |
-| Responsive      | Desktop con mapa 67% / recomendaciones 33%; tablet con KPIs a dos columnas; móvil con KPIs apilados, tabs y CTA inferior                    |
+No hay una conexión de vuelos instalada en este entorno que entregue el recuento requerido. Para automatizar el piloto hace falta un acuerdo/API que devuelva **número de vuelo, fecha, ruta, plazas libres reales y fecha de observación**. El adaptador `loadFlights` queda preparado para sustituirse una vez se disponga de esa fuente. No se usan datos de inventario comercial como si fueran plazas staff.
 
-## Recorrido de revisión
+## Arquitectura
 
-1. En Dashboard, revisar el contexto y la recomendación del ejemplo Economy.
-2. Pulsar **6A** y abrir su detalle; recorrer las cinco capas.
-3. Cambiar a **Business**: se recalculan mapa, indicadores, recomendación e historial.
-4. Usar **Escenario demo** para revisar confianza baja, sin datos y error. Reintentar restablece el escenario normal.
-5. Guardar el vuelo, abrir Watchlist y recargar: permanece guardado.
-6. Crear una alerta, comprobar que un duplicado se rechaza y eliminarla desde Alertas.
-7. A 390 px, alternar Mapa / Recomendaciones / Historial y explorar el mapa con desplazamiento horizontal.
-8. Recorrer la interfaz con Tab y abrir/cerrar detalles con Enter/Escape; se restaura el foco.
+```text
+src/domain/availability.js  Validación, último snapshot, delta y resumen diario
+src/data/demo.js            Adaptador y vuelos de ejemplo
+src/data/storage.js         Registros manuales locales, versión v1
+src/components/ui.js        Iconos, escape HTML y formato de fechas
+src/main.js                 Búsqueda, tarjetas, historial y registro
+src/styles/                 Tokens, diseño y responsive
+Docs/architecture/          Contrato de datos y conexión pendiente
+Docs/design-system.md      Componentes y reglas visuales
+Docs/aprendizajes/          Bitácora de la corrección
+```
+
+Cada snapshot `{ at, count, source }` corresponde a una observación del mismo vuelo y fecha; el gráfico diario conserva la última observación UTC de cada día. El último recuento se usa para ordenar vuelos, **sin inferir probabilidad de embarcar**. Dos vuelos con igual cifra no son necesariamente equivalentes para staff. Plazas y autorizaciones pueden cambiar hasta el cierre de embarque.
+
+La interfaz usa HTML semántico, botones y formularios nativos, foco visible, enlace para saltar al contenido, tabla textual del historial y diseño para escritorio/móvil. Los datos introducidos se guardan en `localStorage` del navegador; no hay cuenta ni sincronización.
+
+El brief original en `.spec/ui-ux-dashboard-mvp.md` describía un producto de compra comercial basado en mapas. La aclaración del usuario en [.spec/staff-pilot.md](.spec/staff-pilot.md) lo sustituye para este piloto.
 
 ## Vista previa
 
 [Escritorio](Docs/previews/dashboard-desktop.png) · [Móvil](Docs/previews/dashboard-mobile.png)
-
-## Arquitectura y estructura
-
-Vite y módulos JavaScript ESM; HTML semántico, CSS con tokens y componentes de presentación sin dependencias en ejecución. Es una SPA estática pequeña: evita añadir infraestructura de servidor antes de definir proveedor y autenticación.
-
-```text
-.spec/                           Brief y especificación de entrada
-src/
-  main.js                        Estado, navegación, eventos y composición
-  components/
-    ui.js                        Cards, badges, botones, iconos y sparklines
-    dashboard.js                 Hero, KPIs, recomendaciones, historial
-    seat-map.js                  Mapa, capas y leyendas
-  domain/analysis.js             Cálculos y recomendaciones puros
-  data/demo.js                   Contrato de carga y fixtures deterministas
-  data/storage.js                Persistencia versionada y validada
-  styles/tokens.css              Tokens del design system
-  styles/app.css                 Layout, estados y responsive
-public/favicon.svg               Marca vectorial propia
-Docs/architecture/               Arquitectura, contrato y cobertura
-Docs/design-system.md            Reglas visuales y componentes
-Docs/aprendizajes/                Bitácora del trabajo
-tests/                          Unitarias y recorridos de navegador
-.github/workflows/ci.yml          Validación automática
-```
-
-Detalles en [arquitectura](Docs/architecture/dashboard.md), [design system](Docs/design-system.md) y [bitácora](Docs/aprendizajes/vuelalibredashboard-codex.md). La fuente de requisitos es [.spec/ui-ux-dashboard-mvp.md](.spec/ui-ux-dashboard-mvp.md). Las marcas `[cite:…]` pertenecen al documento original; no son referencias verificadas de esta implementación.
-
-## Interpretación de métricas
-
-Todas las métricas se calculan sobre la **cabina seleccionada**:
-
-- `estimatedLoadPct`: ocupados aparentes / (ocupados + disponibles, incluidos premium). Bloqueados y desconocidos se excluyen; sin denominador, devuelve `null`.
-- `seatVisibilityRatio`: estados conocidos / total. No equivale a fiabilidad sobre ventas.
-- `seatOpportunityScore`: suma de calidad normalizada de disponibles / total × 100.
-- `seatsTogetherProbability`: proporción de asientos disponibles que pertenecen a algún par contiguo. Por honestidad se muestra como **indicador de contigüidad**, no como probabilidad estadística. Los pares pueden solaparse: un triple genera dos pares, no dos parejas independientes.
-- `windowAvailabilityRatio` y `aisleAvailabilityRatio`: disponibles por preferencia / total de esa preferencia.
-- `confidence`: baja si visibilidad <85%, fracción interpretable <65% o cabina vacía. Es una regla ilustrativa.
-- `buyNowSignal`: Vigilar con confianza baja; Compra hoy si ocupación ≥70% y buenos asientos disponibles ≤15% del total; Puedes esperar en otro caso. “Buenos” significa calidad ≥75/100. No hay predicción de precio ni garantía de disponibilidad.
-
-La calidad por zona, los precios, horarios y la geometría son ilustrativos. No deben utilizarse para decisiones reales.
-
-## Accesibilidad y persistencia
-
-Idioma español, landmarks, enlace para saltar al contenido, controles nativos, foco visible, diálogos con foco atrapado por el navegador, cierre con Escape y restauración del foco. Cada asiento tiene nombre accesible; símbolos, texto y patrones complementan los colores. Se respeta `prefers-reduced-motion`. El historial incluye tabla textual; los minigráficos tienen nombre accesible.
-
-La clave `vuelalibre:v1` contiene watchlist, reglas de alerta y preferencia. No almacena credenciales ni datos personales. Un fallo de escritura informa que los cambios durarán solo la sesión. Borrar los datos del sitio elimina esta configuración. No existe identidad compartida ni aislamiento multiusuario en esta demo.
-
-## Siguiente paso hacia producción
-
-1. Proveedor autorizado que entregue estados normalizados, mapa certificado, moneda, fecha real, procedencia y confianza.
-2. Backend autenticado con snapshots por usuario y vuelo; sustituir `loadFlight` y el repositorio local, sin cambiar los cálculos puros.
-3. Servicio de evaluación de alertas, cola, notificaciones y consentimiento explícito; idempotencia por evento.
-4. Calibración de scores y contigüidad con datos observados; no presentar una heurística como probabilidad.
-5. Auditoría de accesibilidad con tecnologías asistivas, métricas de producto y pruebas con usuarios.
-
-## Publicación
-
-`dist/` es desplegable en cualquier hosting estático. No contiene secretos. La navegación usa hashes para soportar enlaces directos sin reglas especiales del servidor. La tarea entrega código y PR; no despliega un servicio ni incorpora un proveedor de datos.

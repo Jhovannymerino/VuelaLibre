@@ -1,89 +1,74 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyze, groupsOf, recommendations } from "../src/domain/analysis.js";
-import { makeSeats } from "../src/data/demo.js";
-import { readStore, saveStore } from "../src/data/storage.js";
-
-test("groups never cross an aisle or a row; blocked and occupied break groups", () => {
-  const seats = makeSeats();
-  const groups = groupsOf(seats, 3);
-  assert.ok(groups.some((g) => g.map((s) => s.id).join() === "12A,12B,12C"));
-  for (const group of groupsOf(seats)) {
-    assert.equal(new Set(group.map((s) => s.row)).size, 1);
-    assert.equal(new Set(group.map((s) => s.block)).size, 1);
-    assert.ok(group.every((s) => ["available", "premium"].includes(s.status)));
-  }
-  assert.equal(
-    groupsOf(seats.filter((s) => s.id === "6C" || s.id === "7D")).length,
-    0,
+import {
+  compareFlights,
+  dailySnapshots,
+  isValidFlight,
+  summarizeFlight,
+} from "../src/domain/availability.js";
+import { demoFlights } from "../src/data/demo.js";
+import { readFlights, saveFlights } from "../src/data/storage.js";
+test("sorts by latest reported count and keeps flight dates separate", () => {
+  const sorted = compareFlights(demoFlights);
+  assert.deepEqual(
+    sorted.map((f) => f.count),
+    [14, 6, 2],
   );
+  assert.deepEqual(
+    sorted.map((f) => f.id),
+    ["demo-a", "demo-b", "demo-c"],
+  );
+  assert.equal(sorted[0].delta, -1);
 });
-test("apparent load excludes blocked and unknown; no denominator produces no estimate", () => {
-  const seats = makeSeats()
-    .slice(0, 4)
-    .map((s, i) => ({
-      ...s,
-      status: ["occupied", "available", "blocked", "unknown"][i],
-    }));
-  assert.equal(analyze(seats).estimatedLoadPct, 50);
-  assert.equal(analyze(seats).seatVisibilityRatio, 75);
-  assert.equal(analyze([]).estimatedLoadPct, null);
-  assert.equal(analyze([]).buyNowSignal, "watch");
+test("daily view keeps the last observation of each UTC day", () => {
+  const flight = {
+    ...demoFlights[0],
+    snapshots: [
+      { at: "2026-09-21T09:00:00Z", count: 8, source: "manual" },
+      { at: "2026-09-21T18:00:00Z", count: 7, source: "manual" },
+      { at: "2026-09-22T08:00:00Z", count: 10, source: "manual" },
+    ],
+  };
+  assert.deepEqual(
+    dailySnapshots(flight).map((s) => s.count),
+    [7, 10],
+  );
+  assert.equal(summarizeFlight(flight).delta, 3);
+});
+test("zero and growing availability remain valid; no observation remains unknown", () => {
   assert.equal(
-    analyze(seats.map((s) => ({ ...s, status: "blocked" }))).estimatedLoadPct,
+    isValidFlight({
+      ...demoFlights[0],
+      snapshots: [{ at: "2026-09-24T10:00:00Z", count: 0, source: "manual" }],
+    }),
+    true,
+  );
+  assert.equal(
+    summarizeFlight({ ...demoFlights[0], snapshots: [] }).count,
     null,
   );
-});
-test("signals react to the cabin and low confidence suppresses buying urgency", () => {
-  assert.equal(analyze(makeSeats()).buyNowSignal, "buy");
-  assert.equal(analyze(makeSeats("business")).buyNowSignal, "wait");
-  assert.equal(analyze(makeSeats("economy", true)).buyNowSignal, "watch");
-  for (const cabin of ["economy", "business"]) {
-    const m = analyze(makeSeats(cabin));
-    for (const key of [
-      "estimatedLoadPct",
-      "seatVisibilityRatio",
-      "seatOpportunityScore",
-      "seatsTogetherProbability",
-      "windowAvailabilityRatio",
-      "aisleAvailabilityRatio",
-    ])
-      assert.ok(m[key] >= 0 && m[key] <= 100, key);
-  }
-});
-test("recommendations contain available seats and honor preference categories", () => {
-  const results = recommendations(makeSeats());
-  assert.equal(results[1][1].type, "Ventana");
-  assert.equal(results[2][1].type, "Pasillo");
-  assert.ok(
-    results.every(([, s]) => ["available", "premium"].includes(s.status)),
-  );
-  assert.ok(recommendations([]).every(([, s]) => s === undefined));
-});
-test("storage recovers from invalid content and reports write failure", () => {
-  assert.deepEqual(readStore({ getItem: () => "{bad" }), {
-    saved: false,
-    alerts: [],
-    preference: "Ventana",
-  });
   assert.equal(
-    readStore({
-      getItem: () =>
-        JSON.stringify({
-          alerts: [{ id: "x", type: "bogus", cabin: "economy" }],
-        }),
-    }).alerts.length,
-    0,
+    isValidFlight({
+      ...demoFlights[0],
+      snapshots: [{ at: "bad", count: -1, source: "manual" }],
+    }),
+    false,
   );
+});
+test("storage filters malformed records and handles browser errors", () => {
+  const valid = { ...demoFlights[0], source: "manual" };
   assert.equal(
-    saveStore(
-      {},
-      {
-        setItem: () => {
-          throw new Error("quota");
-        },
+    readFlights({ getItem: () => JSON.stringify([valid, { id: "bad" }]) })
+      .length,
+    1,
+  );
+  assert.deepEqual(readFlights({ getItem: () => "{bad" }), []);
+  assert.equal(
+    saveFlights([valid], {
+      setItem: () => {
+        throw new Error("quota");
       },
-    ),
+    }),
     false,
   );
 });

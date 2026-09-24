@@ -1,320 +1,178 @@
 import "./styles/tokens.css";
 import "./styles/app.css";
-import { flight, cabins, loadFlight } from "./data/demo.js";
-import { readStore, saveStore } from "./data/storage.js";
-import { analyze, STATES, isAvailable } from "./domain/analysis.js";
-import {
-  escape,
-  icon,
-  badge,
-  button,
-  emptyState,
-  sectionHeading,
-} from "./components/ui.js";
-import { seatMap } from "./components/seat-map.js";
-import {
-  hero,
-  kpis,
-  recommendationPanel,
-  historyPanel,
-  distribution,
-  alertTypes,
-} from "./components/dashboard.js";
+import { loadFlights } from "./data/demo.js";
+import { readFlights, saveFlights } from "./data/storage.js";
+import { compareFlights, isValidFlight } from "./domain/availability.js";
+import { escape, icon, formatStamp } from "./components/ui.js";
 
 const app = document.querySelector("#app");
 const state = {
-  page: "dashboard",
-  cabin: "economy",
-  layer: "availability",
-  tab: "map",
-  selected: null,
-  zoom: false,
-  mode: "ready",
+  origin: "MAD",
+  destination: "PMI",
+  date: "2026-10-15",
+  manual: readFlights(),
+  demo: [],
   loading: true,
-  error: false,
-  seats: [],
-  history: [],
-  store: readStore(),
   notice: "",
+  selected: null,
 };
-let request = 0;
-const navigation = [
-  ["dashboard", "Dashboard", "grid"],
-  ["history", "Historial", "history"],
-  ["watchlist", "Watchlist", "bookmark"],
-  ["alerts", "Alertas", "bell"],
-  ["profile", "Perfil", "user"],
-];
+const route = () => `${state.origin} → ${state.destination}`;
+const button = (label, action, variant = "secondary", glyph = "") =>
+  `<button class="button ${variant}" data-action="${action}">${glyph ? icon(glyph) : ""}${escape(label)}</button>`;
+const visibleFlights = () =>
+  [...state.demo, ...state.manual].filter(
+    (f) =>
+      f.origin === state.origin &&
+      f.destination === state.destination &&
+      f.date === state.date,
+  );
+function trend(flight) {
+  const snapshots = flight.daily;
+  if (snapshots.length < 2)
+    return `<span class="no-trend">Primera observación</span>`;
+  const max = Math.max(...snapshots.map((s) => s.count), 1),
+    min = Math.min(...snapshots.map((s) => s.count), 0);
+  const points = snapshots
+    .map(
+      (s, i) =>
+        `${(i * 100) / (snapshots.length - 1)},${35 - ((s.count - min) / Math.max(1, max - min)) * 28}`,
+    )
+    .join(" ");
+  return `<svg class="sparkline" viewBox="0 0 100 40" role="img" aria-label="Evolución diaria: ${snapshots.map((s) => `${s.at.slice(0, 10)}, ${s.count} plazas`).join("; ")}"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function flightCard(flight, index) {
+  const direction =
+    flight.delta === null
+      ? "Sin comparación"
+      : flight.delta > 0
+        ? `+${flight.delta} desde la consulta anterior`
+        : flight.delta < 0
+          ? `${flight.delta} desde la consulta anterior`
+          : "Sin cambio desde la consulta anterior";
+  return `<article class="flight-card ${index === 0 ? "leading" : ""}" aria-label="${escape(flight.flightNumber)}"><div class="flight-head"><div class="flight-brand"><span class="airline-mark">UX</span><div><h3>${escape(flight.flightNumber)}</h3><small>${flight.source === "demo" ? "Datos ilustrativos" : "Registro manual"}</small></div></div>${index === 0 && flight.count !== null ? '<span class="leader-label">MÁS PLAZAS REPORTADAS</span>' : ""}</div><div class="flight-time"><strong>${escape(flight.departure)}</strong><span>Air Europa · ${escape(route())}</span></div><div class="flight-count"><strong>${flight.count ?? "—"}</strong><span>plazas libres reportadas</span></div><div class="flight-trend"><div>${trend(flight)}</div><span>${direction}</span></div><div class="flight-foot"><span>${icon("clock")} ${flight.latest ? formatStamp(flight.latest.at) : "Sin observación"}</span><button class="text-button" data-open="${escape(flight.id)}">Ver evolución ${icon("arrow")}</button></div></article>`;
+}
+function historyDetail(flight) {
+  if (!flight) return "";
+  return `<section class="history-panel" id="history-panel" aria-label="Evolución de ${escape(flight.flightNumber)}"><div class="section-heading"><div><p class="eyebrow">SEGUIMIENTO DEL VUELO</p><h2>${escape(flight.flightNumber)} · ${escape(flight.departure)}</h2><p>Plazas reportadas en cada consulta. La fecha del vuelo es ${escape(flight.date)}.</p></div>${flight.source === "manual" ? button("Registrar nuevo conteo", "update", "primary", "plus") : '<span class="demo-tag">HISTORIAL DE EJEMPLO</span>'}</div><div class="history-body"><div class="history-chart">${flight.daily.map((s) => `<div class="bar-row"><time datetime="${s.at}">${s.at.slice(0, 10)}</time><div class="bar-track"><span style="width:${Math.max(3, (s.count / Math.max(...flight.daily.map((x) => x.count), 1)) * 100)}%"></span></div><strong>${s.count}</strong></div>`).join("")}</div><div class="history-table-wrap"><table><caption>Registro de plazas libres</caption><thead><tr><th>Consulta (UTC)</th><th>Plazas</th><th>Origen del dato</th></tr></thead><tbody>${[
+    ...flight.snapshots,
+  ]
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    .map(
+      (s) =>
+        `<tr><td>${formatStamp(s.at)}</td><td><strong>${s.count}</strong></td><td>${s.source === "demo" ? "Ejemplo" : "Manual"}</td></tr>`,
+    )
+    .join("")}</tbody></table></div></div></section>`;
+}
+function render() {
+  const flights = compareFlights(visibleFlights());
+  const selected =
+    flights.find((f) => f.id === state.selected) ?? flights[0] ?? null;
+  if (selected) state.selected = selected.id;
+  const most = flights[0];
+  app.innerHTML = `<a class="skip-link" href="#main">Saltar al contenido</a><header class="site-header"><a class="brand" href="#main"><span class="brand-icon">${icon("plane")}</span>VuelaLibre<span class="brand-period">.</span></a><div class="header-meta"><span class="pilot-label">PILOTO AIR EUROPA</span></div></header><main id="main" tabindex="-1"><section class="intro"><div><p class="eyebrow">DISPONIBILIDAD PARA STAFF</p><h1>Conoce cómo cambian las plazas libres.</h1><p>Consulta un vuelo de Air Europa para una fecha y compara sus recuentos día a día antes de decidir si compras.</p></div><div class="pilot-mark"><span class="airline-mark">UX</span><span>Air Europa · piloto</span></div></section><form class="search-panel" id="search-form"><div class="form-grid"><label>Origen<input name="origin" value="${escape(state.origin)}" maxlength="3" pattern="[A-Za-z]{3}" required aria-label="Origen, código de tres letras"></label><span class="swap" aria-hidden="true">→</span><label>Destino<input name="destination" value="${escape(state.destination)}" maxlength="3" pattern="[A-Za-z]{3}" required aria-label="Destino, código de tres letras"></label><label>Fecha del vuelo<input name="date" type="date" value="${escape(state.date)}" required></label><button class="button primary" type="submit">${icon("arrow")} Ver vuelos</button></div></form>${state.notice ? `<p class="notice" role="status">${escape(state.notice)}</p>` : ""}<section class="summary"><div><span class="pill">UNA CIFRA, SEGUIDA EN EL TIEMPO</span><h2>${most ? `${most.count} plazas libres en el vuelo con más disponibilidad reportada.` : "Busca los datos de tu vuelo."}</h2><p>${most ? `${escape(most.flightNumber)} · ${escape(most.departure)} · ${escape(route())} · ${escape(state.date)}. La cifra puede cambiar antes de volar.` : "Los ejemplos solo corresponden a MAD → PMI el 15 de octubre de 2026. Para otras búsquedas hace falta una fuente de plazas."}</p></div><div class="summary-visual" aria-hidden="true"><strong>${most?.count ?? "—"}</strong><span>plazas reportadas</span></div></section><div class="disclosure" role="note">${icon("info")}<p>Este piloto muestra <strong>datos de ejemplo o registros manuales</strong>; todavía no recibe plazas reales automáticamente. Las plazas libres no garantizan embarque staff y no equivalen a una probabilidad calculada. <a href="https://stafftraveler.com/en" target="_blank" rel="noopener noreferrer">Consultar StaffTraveler ↗</a> (servicio externo; disponibilidad según sus usuarios).</p></div><section class="results" aria-label="Vuelos disponibles"><div class="section-heading"><div><p class="eyebrow">VUELOS Y DISPONIBILIDAD</p><h2>${escape(route())} <span>· ${escape(state.date)}</span></h2><p>${flights.length} ${flights.length === 1 ? "vuelo observado" : "vuelos observados"} · ordenados por el último recuento</p></div>${button("Registrar vuelo y plazas", "add", "secondary", "plus")}</div>${state.loading ? '<div class="empty" role="status">Cargando ejemplos…</div>' : flights.length ? `<div class="cards">${flights.map(flightCard).join("")}</div>` : `<div class="empty">${icon("plane")}<h3>Sin recuentos para esta búsqueda</h3><p>No hay una conexión pública confirmada que entregue las plazas libres reales para este vuelo. Puedes registrar una cifra obtenida de una fuente autorizada.</p>${button("Registrar plazas", "add", "primary", "plus")}</div>`}</section>${selected ? historyDetail(selected) : ""}<section class="how-it-works"><div><p class="eyebrow">CÓMO LEER LA EVOLUCIÓN</p><h2>Revisa la cifra antes de comprar.</h2></div><div class="steps"><div><span>01</span><strong>Elige vuelo y fecha</strong><p>Cada vuelo tiene su propio historial de consultas.</p></div><div><span>02</span><strong>Mira la tendencia</strong><p>Compara el recuento actual con el de días anteriores.</p></div><div><span>03</span><strong>Confirma de nuevo</strong><p>La disponibilidad puede cambiar incluso el día del vuelo.</p></div></div></section><footer><span>VuelaLibre · Piloto Air Europa</span><span>Sin actualización automática de plazas reales.</span></footer></main><div id="dialog-root"></div><div id="announcer" class="sr-only" role="status" aria-live="polite"></div>`;
+}
 function announce(message) {
   document.querySelector("#announcer").textContent = message;
 }
-function persist(message) {
-  const ok = saveStore(state.store);
-  state.notice = ok
-    ? message
-    : "No se pudo guardar en este navegador. Los cambios solo durarán esta sesión.";
-  announce(state.notice);
-  return ok;
-}
-function shell(content) {
-  return `<aside class="sidebar"><a href="#dashboard" class="brand" data-nav="dashboard"><span class="brand-mark">${icon("plane")}</span>VuelaLibre<span class="brand-dot">.</span></a><p class="sidebar-label">TU ESPACIO DE VIAJE</p><nav aria-label="Navegación principal">${navigation.map(([id, label, glyph]) => `<a href="#${id}" data-nav="${id}" ${state.page === id ? 'aria-current="page"' : ""}>${icon(glyph)}<span>${label}</span>${id === "alerts" && state.store.alerts.length ? `<span class="nav-count">${state.store.alerts.length}</span>` : ""}</a>`).join("")}</nav><div class="sidebar-bottom"><div class="sidebar-tip">${icon("spark")}<strong>Viaja con más contexto.</strong><p>Las mejores decisiones empiezan antes de despegar.</p></div><button class="profile-button" data-nav="profile"><span class="avatar">V</span><span>Viajero invitado<small>Espacio local · Demo</small></span>${icon("chevron")}</button></div></aside><div class="workspace"><header class="topbar"><div><span class="breadcrumb">Mi espacio <span>/</span></span><strong>${navigation.find((n) => n[0] === state.page)[1]}</strong></div><div class="topbar-right">${badge("DEMO · DATOS SIMULADOS", "demo")}<button class="icon-button" data-nav="alerts" aria-label="Ver alertas">${icon("bell")}</button><button class="avatar" data-nav="profile" aria-label="Ver perfil">V</button></div></header><div class="flight-context"><div class="flight-identity"><span class="airline-logo" aria-label="Iberia">IB</span><div><strong>${flight.airline} <span>${flight.number}</span></strong><small>${flight.aircraft} · plano ilustrativo</small></div></div><div class="flight-route"><strong>${flight.origin} <span>→</span> ${flight.destination}</strong><small>${flight.date} · ${flight.departure} (Madrid)</small></div><label class="cabin-select"><span>Cabina</span><select id="cabin" aria-label="Cabina">${Object.entries(
-    cabins,
-  )
-    .map(
-      ([key, c]) =>
-        `<option value="${key}" ${key === state.cabin ? "selected" : ""}>${c.name}</option>`,
-    )
-    .join(
-      "",
-    )}</select></label><div class="updated">${icon("clock")}<span>Snapshot de ejemplo<small>24 sep 2026 · 10:42 UTC</small></span></div><button class="button secondary save-button" data-action="save" aria-pressed="${state.store.saved}">${icon(state.store.saved ? "check" : "bookmark")}<span>${state.store.saved ? "Vuelo guardado" : "Guardar vuelo"}</span></button></div><main id="main" tabindex="-1">${state.notice ? `<div class="notice" role="status">${escape(state.notice)}<button class="icon-button" data-action="dismiss" aria-label="Cerrar aviso">${icon("close")}</button></div>` : ""}${content}<footer class="footer"><span>VuelaLibre · Compra con contexto.</span><span>Demo local. Sin reservas ni seguimiento en segundo plano.</span></footer></main><div class="mobile-cta">${button("Crear alerta", "alert", "primary", "bell")}${button(state.store.saved ? "Guardado" : "Guardar vuelo", "save", "secondary", "bookmark")}</div></div>`;
-}
-function dashboard() {
-  const controls = `<div class="page-intro"><div><p class="eyebrow">MADRID → LISBOA</p><p>Tu próxima decisión, un poco más clara.</p></div><label class="demo-select">Escenario demo<select id="scenario" aria-label="Escenario demo">${[
-    ["ready", "Normal"],
-    ["low", "Confianza baja"],
-    ["empty", "Sin datos"],
-    ["error", "Error de carga"],
-  ]
-    .map(
-      ([value, label]) =>
-        `<option value="${value}" ${state.mode === value ? "selected" : ""}>${label}</option>`,
-    )
-    .join("")}</select></label></div>`;
-  if (state.loading)
-    return `${controls}<section aria-busy="true" aria-label="Cargando disponibilidad"><p role="status">Analizando disponibilidad visible…</p><div class="skeleton hero-skeleton"></div><div class="kpi-grid">${Array.from({ length: 5 }, () => '<div class="skeleton kpi-skeleton"></div>').join("")}</div><div class="skeleton map-skeleton"></div></section>`;
-  if (state.error || !state.seats.length)
-    return `${controls}${emptyState(state.error ? "No pudimos cargar el análisis" : "No fue posible obtener el mapa de asientos para este vuelo en este momento", "Algunas aerolíneas o flujos pueden limitar la visualización del mapa. Esta demo permite reintentar con el escenario normal.", button("Intentar nuevamente", "retry", "primary"))}`;
-  const metrics = analyze(state.seats);
-  return `${controls}${metrics.confidence === "low" ? `<div class="confidence" role="status">${icon("info")}<div><strong>Resultado con confianza baja</strong><p>Mapa parcial o estados ambiguos. Visibilidad: ${metrics.seatVisibilityRatio}%. La estimación no permite confirmar la ocupación real.</p></div>${button("Crear alerta y volver a revisar", "alert")}</div>` : ""}${hero(metrics)}${kpis(metrics, state.history)}<div class="mobile-tabs" role="group" aria-label="Sección del dashboard">${[
-    ["map", "Mapa"],
-    ["recommendations", "Recomendaciones"],
-    ["history", "Historial"],
-  ]
-    .map(
-      ([key, label]) =>
-        `<button data-tab="${key}" aria-pressed="${state.tab === key}" class="${state.tab === key ? "active" : ""}">${label}</button>`,
-    )
-    .join(
-      "",
-    )}</div><div class="analysis-layout tab-${state.tab}"><div class="map-column">${seatMap(state.seats, state.cabin, state.layer, state.selected, state.zoom)}<div class="distribution-card card"><span class="eyebrow">EL MAPA DE UN VISTAZO</span>${distribution(state.seats)}<p>${metrics.available.length} disponibles · ${metrics.seatVisibilityRatio}% de estados visibles · confianza ${metrics.confidence === "high" ? "alta" : "baja"} en la lectura del mapa</p></div></div>${recommendationPanel(state.seats, metrics)}<div class="history-slot">${historyPanel(state.history)}</div></div><details class="methodology"><summary>Cómo interpretar estas señales</summary><p>La ocupación aparente divide los ocupados entre ocupados y disponibles; excluye bloqueados y desconocidos. El score pondera cantidad y calidad de asientos disponibles. El indicador de contigüidad mide qué proporción de disponibles pertenece a un par; no es una probabilidad estadística. Las recomendaciones usan reglas de demostración, sin predecir precios ni confirmar ventas. Visibilidad alta significa que conocemos el estado mostrado, no la ocupación real.</p></details>`;
-}
-function pageContent() {
-  if (state.page === "dashboard") return dashboard();
-  if (state.page === "history")
-    return `<h1>Historial del vuelo</h1>${state.loading ? '<p role="status">Cargando historial…</p>' : state.history.length ? historyPanel(state.history, true) : emptyState("Sin snapshots disponibles", "Vuelve al dashboard y prueba el escenario normal.", button("Volver al dashboard", "dashboard"))}`;
-  if (state.page === "watchlist")
-    return `<h1>Tu watchlist</h1><p class="page-description">Vuelos que quieres volver a mirar. Guardados solo en este navegador.</p>${state.store.saved ? `<article class="card saved-flight"><span class="small-icon">${icon("plane")}</span><div><h2>MAD → LIS</h2><p>Iberia IB539 · ${flight.date}</p><small>Consulta las opciones visibles de tu vuelo de ejemplo.</small></div>${button("Ver dashboard", "dashboard", "primary")}${button("Quitar vuelo", "save")}</article>` : emptyState("Un lugar para tus próximos vuelos", "Guarda el vuelo del dashboard para encontrarlo aquí.", button("Explorar mi vuelo", "dashboard", "primary"))}`;
-  if (state.page === "alerts")
-    return `<h1>Tus alertas</h1><p class="page-description">Reglas locales de demostración. No se envían correos ni se consulta el vuelo en segundo plano.</p>${button("Crear alerta", "alert", "primary", "bell")}<div class="alert-list">${state.store.alerts.length ? state.store.alerts.map((a) => `<article class="card alert-card"><span class="small-icon">${icon("bell")}</span><div><h2>${alertTypes[a.type]}</h2><p>IB539 · MAD → LIS · ${cabins[a.cabin].name}</p>${badge("Guardada localmente · sin monitoreo", "demo")}</div><button class="button secondary" data-remove-alert="${escape(a.id)}">Eliminar</button></article>`).join("") : emptyState("Todavía no tienes alertas", "Elige qué cambio quieres revisar en tu próximo chequeo.")}</div>`;
-  return `<h1>Tu perfil de viaje</h1><p class="page-description">Personaliza tu espacio local. No hay una cuenta ni sincronización entre dispositivos.</p><section class="card profile-card">${sectionHeading("VIAJERO INVITADO", "Tus preferencias")}<form id="profile-form"><label>Preferencia de asiento<select name="preference">${["Ventana", "Pasillo", "Sin preferencia"].map((p) => `<option ${state.store.preference === p ? "selected" : ""}>${p}</option>`).join("")}</select></label><p>Se guarda para tus próximas visitas. El panel muestra siempre todas las categorías de recomendaciones.</p><button class="button primary" type="submit">Guardar preferencia</button></form></section>`;
-}
-function render() {
-  app.innerHTML = shell(pageContent());
-}
-async function refresh() {
-  const current = ++request;
-  state.loading = true;
-  state.error = false;
-  state.selected = null;
-  render();
-  try {
-    const data = await loadFlight(state.cabin, state.mode);
-    if (current !== request) return;
-    Object.assign(state, data);
-  } catch {
-    if (current !== request) return;
-    state.error = true;
-    state.seats = [];
-    state.history = [];
-  }
-  state.loading = false;
-  render();
-  announce(
-    state.error
-      ? "Error al cargar el análisis."
-      : state.seats.length
-        ? "Análisis del vuelo disponible."
-        : "Sin datos del vuelo.",
-  );
-}
-function navigate(page) {
-  state.page = navigation.some((n) => n[0] === page) ? page : "dashboard";
-  history.replaceState(null, "", `#${state.page}`);
-  render();
-  document.querySelector("#main").focus();
-  window.scrollTo(0, 0);
-}
-function dialog(content, label, onSubmit) {
-  const root = document.querySelector("#dialog-root");
+function openDialog(mode) {
   const opener = document.activeElement;
-  root.innerHTML = `<dialog aria-labelledby="dialog-title"><div class="dialog-heading"><h2 id="dialog-title">${label}</h2><button class="icon-button" data-close aria-label="Cerrar">${icon("close")}</button></div>${content}</dialog>`;
-  const el = root.querySelector("dialog");
-  el.querySelector("[data-close]").onclick = () => el.close();
-  el.addEventListener("click", (e) => {
-    if (e.target === el) {
-      const r = el.getBoundingClientRect();
-      if (
-        e.clientX < r.left ||
-        e.clientX > r.right ||
-        e.clientY < r.top ||
-        e.clientY > r.bottom
-      )
-        el.close();
-    }
-  });
-  el.addEventListener("close", () => {
+  const root = document.querySelector("#dialog-root");
+  const current = state.manual.find((f) => f.id === state.selected);
+  root.innerHTML = `<dialog aria-labelledby="dialog-title"><div class="dialog-heading"><div><p class="eyebrow">REGISTRO MANUAL</p><h2 id="dialog-title">${mode === "update" ? "Nuevo recuento de plazas" : "Registrar vuelo y plazas"}</h2></div><button class="close-button" type="button" aria-label="Cerrar">${icon("close")}</button></div><p>Introduce la cifra observada y VuelaLibre guardará una nueva consulta en este navegador.</p><form id="record-form">${mode === "add" ? '<label>Número de vuelo<input name="flightNumber" placeholder="UX1234" maxlength="20" required></label><label>Hora de salida<input name="departure" type="time" required></label>' : `<p class="dialog-context">${escape(current?.flightNumber ?? "")} · ${route()} · ${state.date}</p>`}<label>Plazas libres observadas<input name="count" type="number" min="0" max="999" required></label><p id="form-error" class="form-error" role="alert"></p><button class="button primary" type="submit">Guardar recuento</button></form></dialog>`;
+  const dialog = root.querySelector("dialog");
+  dialog.querySelector(".close-button").onclick = () => dialog.close();
+  dialog.addEventListener("close", () => {
     root.innerHTML = "";
     if (opener?.isConnected) opener.focus();
     else document.querySelector("#main").focus();
   });
-  if (onSubmit)
-    el.querySelector("form").onsubmit = (e) => {
-      e.preventDefault();
-      onSubmit(new FormData(e.target), el);
-    };
-  el.showModal();
-}
-function openAlert() {
-  dialog(
-    `<p>Elige el cambio que te interesa en ${cabins[state.cabin].name}.</p><form id="alert-form"><fieldset><legend>Condición de la alerta</legend>${Object.entries(
-      alertTypes,
-    )
-      .map(
-        ([key, label], i) =>
-          `<label class="radio-option"><input type="radio" name="type" value="${key}" ${i === 0 ? "checked" : ""} required><span>${label}</span></label>`,
-      )
-      .join(
-        "",
-      )}</fieldset><div class="demo-disclosure">Esta regla se guarda en este navegador. La demo no supervisa cambios ni envía notificaciones.</div><p id="alert-feedback" role="status"></p><button class="button primary" type="submit">Guardar alerta local</button></form>`,
-    "Crear alerta",
-    (form, el) => {
-      const type = form.get("type");
-      if (
-        state.store.alerts.some(
-          (a) => a.type === type && a.cabin === state.cabin,
-        )
-      ) {
-        document.querySelector("#alert-feedback").textContent =
-          "Ya tienes esta alerta para esta cabina.";
+  dialog.querySelector("form").onsubmit = (e) => {
+    e.preventDefault();
+    const data = new FormData(e.target),
+      snapshot = {
+        at: new Date().toISOString(),
+        count: Number(data.get("count")),
+        source: "manual",
+      };
+    if (mode === "update") {
+      if (!current) return;
+      current.snapshots.push(snapshot);
+    } else {
+      const flight = {
+        id: crypto.randomUUID(),
+        source: "manual",
+        airline: "Air Europa",
+        origin: state.origin,
+        destination: state.destination,
+        date: state.date,
+        flightNumber: String(data.get("flightNumber")).trim().toUpperCase(),
+        departure: data.get("departure"),
+        snapshots: [snapshot],
+      };
+      if (!isValidFlight(flight)) {
+        dialog.querySelector("#form-error").textContent =
+          "Revisa los datos del vuelo.";
         return;
       }
-      state.store.alerts.push({
-        id: crypto.randomUUID(),
-        type,
-        cabin: state.cabin,
-        flightId: flight.id,
-        createdAt: new Date().toISOString(),
-      });
-      persist("Alerta guardada localmente. No hay monitoreo automático.");
-      render();
-      el.close();
-    },
-  );
+      state.manual.push(flight);
+      state.selected = flight.id;
+    }
+    state.notice = saveFlights(state.manual)
+      ? "Recuento guardado localmente."
+      : "El navegador no pudo guardar el recuento; durará solo esta sesión.";
+    dialog.close();
+    render();
+    announce(state.notice);
+  };
+  dialog.showModal();
 }
-function showSeat(id) {
-  const seat = state.seats.find((s) => s.id === id);
-  if (!seat) return;
-  state.selected = id;
-  document.querySelectorAll("[data-seat].seat").forEach((el) => {
-    el.classList.toggle("selected", el.dataset.seat === id);
-    el.setAttribute("aria-pressed", String(el.dataset.seat === id));
-  });
-  dialog(
-    `<div class="seat-detail-badges">${badge(STATES[seat.status], seat.status === "premium" ? "info" : "neutral")}${isAvailable(seat) && seat.recommended ? badge("Recomendado", "good") : ""}</div><dl class="seat-details"><div><dt>Tipo</dt><dd>${seat.type}</dd></div><div><dt>Cabina</dt><dd>${cabins[state.cabin].name}</dd></div><div><dt>Precio de asiento</dt><dd>${isAvailable(seat) && seat.price !== null ? `${seat.price} € · simulado` : "No disponible"}</dd></div><div><dt>Calidad de zona</dt><dd>${seat.quality >= 75 ? "Buena" : seat.quality >= 50 ? "Regular" : "Menor calidad"}</dd></div></dl><p>${seat.note}</p><p class="muted-copy">Consultar el detalle no reserva el asiento. Confirma disponibilidad y condiciones con la aerolínea.</p>`,
-    `Asiento ${seat.id}`,
-  );
-}
-app.addEventListener("click", (e) => {
-  const target = e.target.closest("button, a");
-  if (!target) return;
-  if (target.dataset.nav) {
-    e.preventDefault();
-    navigate(target.dataset.nav);
-    return;
-  }
-  if (target.dataset.seat) {
-    showSeat(target.dataset.seat);
-    return;
-  }
-  if (target.dataset.layer) {
-    state.layer = target.dataset.layer;
-    render();
-    document.querySelector(`[data-layer="${state.layer}"]`).focus();
-    return;
-  }
-  if (target.dataset.tab) {
-    state.tab = target.dataset.tab;
-    render();
-    document.querySelector(`[data-tab="${state.tab}"]`).focus();
-    return;
-  }
-  if (target.dataset.removeAlert) {
-    state.store.alerts = state.store.alerts.filter(
-      (a) => a.id !== target.dataset.removeAlert,
-    );
-    persist("Alerta eliminada.");
-    render();
-    document.querySelector('[data-action="alert"]').focus();
-    return;
-  }
-  switch (target.dataset.action) {
-    case "save":
-      state.store.saved = !state.store.saved;
-      persist(
-        state.store.saved
-          ? "Vuelo guardado en tu watchlist local."
-          : "Vuelo eliminado de tu watchlist.",
-      );
-      render();
-      document.querySelector('[data-action="save"]').focus();
-      break;
-    case "alert":
-      openAlert();
-      break;
-    case "dashboard":
-      navigate("dashboard");
-      break;
-    case "retry":
-      state.mode = "ready";
-      refresh();
-      break;
-    case "zoom":
-      state.zoom = !state.zoom;
-      render();
-      document.querySelector('[data-action="zoom"]').focus();
-      break;
-    case "dismiss":
-      state.notice = "";
-      render();
-      document.querySelector("#main").focus();
-      break;
-  }
-});
-app.addEventListener("change", (e) => {
-  if (e.target.id === "cabin") {
-    state.cabin = e.target.value;
-    refresh();
-  }
-  if (e.target.id === "scenario") {
-    state.mode = e.target.value;
-    refresh();
-  }
-});
 app.addEventListener("submit", (e) => {
-  if (e.target.id === "profile-form") {
-    e.preventDefault();
-    state.store.preference = new FormData(e.target).get("preference");
-    persist("Preferencia guardada en este navegador.");
+  if (e.target.id !== "search-form") return;
+  e.preventDefault();
+  const data = new FormData(e.target);
+  const origin = String(data.get("origin")).trim().toUpperCase(),
+    destination = String(data.get("destination")).trim().toUpperCase();
+  if (origin === destination) {
+    state.notice = "Origen y destino deben ser distintos.";
     render();
-    document.querySelector("#profile-form button").focus();
+    announce(state.notice);
+    return;
+  }
+  Object.assign(state, {
+    origin,
+    destination,
+    date: data.get("date"),
+    selected: null,
+    notice: "",
+  });
+  render();
+});
+app.addEventListener("click", (e) => {
+  if (e.target.closest('[data-action="add"]')) {
+    openDialog("add");
+    return;
+  }
+  if (e.target.closest('[data-action="update"]')) {
+    openDialog("update");
+    return;
+  }
+  const open = e.target.closest("[data-open]");
+  if (open) {
+    state.selected = open.dataset.open;
+    render();
+    document
+      .querySelector("#history-panel")
+      .scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (e.target.closest(".skip-link")) {
+    e.preventDefault();
+    document.querySelector("#main").focus();
   }
 });
-document.querySelector(".skip-link").addEventListener("click", (event) => {
-  event.preventDefault();
-  document.querySelector("#main").focus();
+render();
+loadFlights().then((flights) => {
+  state.demo = flights;
+  state.loading = false;
+  render();
 });
-window.addEventListener("hashchange", () => navigate(location.hash.slice(1)));
-state.page = navigation.some((n) => n[0] === location.hash.slice(1))
-  ? location.hash.slice(1)
-  : "dashboard";
-refresh();
