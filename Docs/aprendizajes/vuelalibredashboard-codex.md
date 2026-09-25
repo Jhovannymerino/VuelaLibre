@@ -27,3 +27,16 @@ El usuario aclaró que necesitaba saber **de dónde obtienen los datos** las apl
 ## Radar estimado sin carga exacta
 
 El usuario aceptó indicadores probabilísticos en vez de una cifra exacta. Se diseñó un radar que combina cupo vendible, prueba de cotización de X+1 pasajeros, precio comparable y serie diaria. El precio semanal bruto se descartó como predictor suficiente porque intervienen la antelación y la estrategia de tarifas. Se implementó una función de dominio para evaluar la señal comercial sin sumar clases ni inventar porcentajes. La [propuesta y plan de validación](../architecture/radar-probabilidad.md) explican cómo recoger datos de Amadeus con claves propias de la aplicación y qué muestra haría falta para calibrar una probabilidad real de plazas al cierre.
+
+## Iteración 2026-09-25: funcionamiento sin cuentas de pago
+
+La investigación confirmó que no existe una fuente pública, estable y sin autenticación que devuelva plazas staff de Air Europa. Air Europa bloquea consultas automatizadas de su web; las páginas públicas de 2LNR permiten leer horarios y la disponibilidad de premio exige cuenta; los agregadores de cargas requieren cuenta o créditos. Amadeus puede entregar inventario comercial por clase, pero su producción exige alta, método de pago y facturación por encima de la cuota gratuita.
+
+El MVP adopta por ello una frontera explícita:
+
+- sin credenciales, el backend usa `public-2lnr-schedule` para listar vuelos UX programados y conserva el enlace a la fuente;
+- esos vuelos llevan `availabilityKnown: false`, señal `unknown`, sin “0 plazas” ni probabilidad inventada;
+- con Amadeus configurado, se activa el radar de cupo vendible y su histórico local, siempre etiquetado como señal comercial indirecta;
+- la UI distingue “horario público, sin cupos” de una señal comercial y explica qué debe verificar el staff antes de comprar.
+
+La decisión permite que la app sea útil y demostrable sin cuenta de pago, a la vez que deja un adaptador claro para una fuente autorizada de cargas reales cuando exista.

@@ -61,3 +61,17 @@ El brief original en `.spec/ui-ux-dashboard-mvp.md` describía un producto de co
 ## Vista previa
 
 [Escritorio](Docs/previews/dashboard-desktop.png) · [Móvil](Docs/previews/dashboard-mobile.png)
+
+## Modo gratuito sin cuentas
+
+El servidor funciona sin credenciales. En ese modo consulta el horario público de 2LNR para descubrir vuelos UX por ruta y fecha y enlaza la fuente original desde cada tarjeta. Ese dato **no contiene plazas libres, cupos staff ni una probabilidad**; la interfaz lo marca como “horario público, sin cupos” y nunca lo convierte en un cero o una estimación inventada.
+
+Si se configuran opcionalmente `AMADEUS_CLIENT_ID` y `AMADEUS_CLIENT_SECRET`, el mismo endpoint cambia al adaptador de inventario comercial de Amadeus y guarda lecturas locales para mostrar tendencia. Esa vía sigue siendo una señal de clases tarifarias a la venta (máximo visible 9+), no una carga staff. En producción Amadeus requiere alta y facturación; este repositorio no depende de ella para arrancar.
+
+### API local
+
+- `GET /api/health` indica si Amadeus está configurado y qué fuente está activa.
+- `GET /api/market?origin=MAD&destination=PMI&date=2026-10-15&threshold=5` devuelve vuelos UX. Sin cuenta devuelve solo horarios públicos; con Amadeus devuelve la señal comercial y su historial.
+- `npm run dev:all` levanta Vite y el backend Node en desarrollo.
+
+La fuente pública se consume como página de horarios de [2LNR](https://2lnr.com/routes/mad-pmi.md), cuya página de [premios Air Europa](https://2lnr.com/awards/ux) confirma que la disponibilidad de premio requiere cuenta. Ninguna de esas páginas expone la carga staff real. Para obtenerla habría que incorporar una fuente autorizada o cargas reportadas por personal; no se automatiza el acceso a cuentas de terceros.

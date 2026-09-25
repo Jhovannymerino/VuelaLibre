@@ -178,7 +178,7 @@ main {
 }
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 25px 1fr 1.25fr auto;
+  grid-template-columns: 1fr 25px 1fr 1.1fr 0.8fr auto;
   align-items: end;
   gap: 12px;
 }
@@ -188,6 +188,11 @@ main {
   font-size: 11px;
   font-weight: 650;
   color: var(--muted);
+}
+.field-hint {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 9px;
 }
 input {
   width: 100%;
@@ -383,6 +388,45 @@ input::placeholder {
   padding: 5px 7px;
   border-radius: 5px;
   text-align: center;
+}
+.signal-badge {
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.4px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.signal-badge.supported {
+  color: var(--good);
+  background: #e5f2db;
+}
+.signal-badge.not-supported {
+  color: #8a6d3b;
+  background: #f3ede1;
+}
+.signal-badge.unknown {
+  color: var(--muted);
+  background: #ececea;
+}
+.signal-headline {
+  font-size: 12px;
+  font-weight: 650;
+  margin-top: 18px;
+  color: var(--ink);
+}
+.fare-context {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 0 0 11px;
+}
+.source-tag {
+  font-size: 10px;
+  color: var(--muted);
+  background: #eef2ea;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 .flight-time {
   display: flex;
@@ -682,7 +726,10 @@ input:focus-visible {
     grid-template-columns: repeat(2, 1fr);
   }
   .form-grid {
-    grid-template-columns: 1fr 25px 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .swap {
+    display: none;
   }
   .form-grid .button {
     grid-column: 1/-1;
@@ -739,7 +786,8 @@ input:focus-visible {
     grid-template-columns: 1fr 20px 1fr;
     gap: 10px;
   }
-  .form-grid label:nth-of-type(3) {
+  .form-grid label:nth-of-type(3),
+  .form-grid label:nth-of-type(4) {
     grid-column: 1/-1;
   }
   .form-grid .button {

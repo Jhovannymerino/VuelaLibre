@@ -7,3 +7,7 @@ El sistema debe buscar por ruta y fecha, mostrar vuelos y último recuento con m
 No se proporcionaron credenciales ni acceso a fuentes de cargas. La búsqueda de conexiones no encontró un endpoint público verificable de Air Europa que entregue el recuento requerido. Por tanto, el piloto muestra ejemplos explícitos y permite registrar observaciones manuales para validar el flujo de seguimiento. Conectar una fuente autorizada será requisito para ofrecer datos reales automáticos.
 
 Esta aclaración sustituye el propósito precompra comercial de `.spec/ui-ux-dashboard-mvp.md`. Ese documento queda como antecedente histórico.
+
+## Ampliación posterior: radar de probabilidad indirecta
+
+La persona aceptó una estimación en lugar del total exacto de plazas libres. Para el piloto UX se puede usar inventario comercial vendible por clase, evolución diaria, cotización de grupos de tamaño X+1 y precio relativo de vuelos comparables para mostrar **indicios de que haya más de X plazas**. La pantalla debe distinguir claramente inventario vendible de plazas físicas/staff y mostrar cuándo se obtuvo la observación. La media simple de precios según día de la semana no prueba ocupación. Un porcentaje de probabilidad de plazas al cierre solo se publicará si se calibra contra cargas reales; mientras tanto el producto mostrará una señal cualitativa. Leer `Docs/architecture/radar-probabilidad.md` para el método y sus límites.

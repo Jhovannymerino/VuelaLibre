@@ -32,3 +32,27 @@ export const formatStamp = (stamp) => {
         timeZone: "UTC",
       }).format(time) + " UTC";
 };
+/**
+ * Formats a naive local datetime (e.g. an airport departure with no UTC
+ * offset, as returned by GDS availability responses) without reinterpreting
+ * it through the browser's own timezone, unlike Date.parse + formatStamp.
+ */
+export const formatLocalStamp = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(
+    String(value ?? ""),
+  );
+  if (!match) return "Sin fecha";
+  const [, y, mo, d, h = "00", mi = "00"] = match;
+  const time = Date.UTC(
+    Number(y),
+    Number(mo) - 1,
+    Number(d),
+    Number(h),
+    Number(mi),
+  );
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(time);
+};
