@@ -94,7 +94,9 @@ test("shows threshold evidence, capped counts and daily history", async ({
   ).toBeTruthy();
 });
 
-test("search submits route, date and X to the backend", async ({ page }) => {
+test("search submits route, date range and X to the backend", async ({
+  page,
+}) => {
   const queries = [];
   await page.route("**/api/market?*", (route) => {
     queries.push(new URL(route.request().url()).searchParams);
@@ -103,14 +105,16 @@ test("search submits route, date and X to the backend", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Origen, código de tres letras").fill("BCN");
   await page.getByLabel("Destino, código de tres letras").fill("MAD");
-  await page.getByLabel("Fecha del vuelo").fill("2026-10-15");
+  await page.getByLabel("Desde").fill("2026-10-15");
+  await page.getByLabel("Hasta").fill("2026-10-17");
   await page.getByLabel("Umbral X (plazas)").fill("3");
   await page.getByRole("button", { name: "Buscar" }).click();
   await expect.poll(() => queries.length).toBe(2);
   expect(Object.fromEntries(queries[1])).toEqual({
     origin: "BCN",
     destination: "MAD",
-    date: "2026-10-15",
+    dateFrom: "2026-10-15",
+    dateTo: "2026-10-17",
     threshold: "3",
   });
 });

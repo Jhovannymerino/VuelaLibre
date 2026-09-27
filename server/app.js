@@ -44,11 +44,15 @@ export function createRequestHandler({ amadeusClient, store, publicSchedule }) {
         .trim()
         .toUpperCase();
       const date = (url.searchParams.get("date") ?? "").trim();
+      const dateFrom = (url.searchParams.get("dateFrom") ?? date).trim();
+      const dateTo = (url.searchParams.get("dateTo") ?? dateFrom).trim();
       const rawThreshold = url.searchParams.get("threshold");
       const { errors, threshold } = validateQuery({
         origin,
         destination,
         date,
+        dateFrom,
+        dateTo,
         threshold: rawThreshold,
       });
       if (errors.length) {
@@ -65,6 +69,8 @@ export function createRequestHandler({ amadeusClient, store, publicSchedule }) {
           origin,
           destination,
           date,
+          dateFrom,
+          dateTo,
           threshold,
           amadeusClient,
           store,
