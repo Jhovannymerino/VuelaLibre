@@ -1,0 +1,27 @@
+{
+  "name": "vuelalibre-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "dev:server": "node server/index.js",
+    "dev:all": "node scripts/dev-all.mjs",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/*.test.js",
+    "test:backend": "node --test tests/backend.test.js",
+    "test:e2e": "playwright test",
+    "check": "npm run format:check && npm test && npm run build && npm run test:e2e",
+    "format": "prettier --write src server scripts tests *.js *.json index.html Docs README.md .github",
+    "format:check": "prettier --check src server scripts tests *.js *.json index.html Docs README.md .github"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "prettier": "^3.9.9",
+    "vite": "^7.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

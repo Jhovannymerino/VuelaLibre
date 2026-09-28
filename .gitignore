@@ -1,0 +1,10 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+.env*
+!.env.example
+.DS_Store
+/test-agent-created.txt
+/.spec/test.txt
+/server/data/
