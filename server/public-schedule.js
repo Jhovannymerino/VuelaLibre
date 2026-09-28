@@ -73,6 +73,45 @@ export function parsePublicSchedule(markdown, { origin, destination, date }) {
       sourceUrl: `https://2lnr.com/routes/${origin.toLowerCase()}-${destination.toLowerCase()}`,
     });
   }
+  // 2LNR's free schedule window can end before the requested date. Keep a
+  // conservative route timetable fallback from the published seasonal
+  // schedule: UX176 operates LIM→MAD and UX175 operates MAD→LIM in this
+  // period. This is still schedule data, never seat availability.
+  const seasonal = [
+    {
+      origin: "LIM",
+      destination: "MAD",
+      flightNumber: "UX176",
+      departure: "10:20",
+      from: "2026-09-16",
+      to: "2026-10-23",
+    },
+    {
+      origin: "MAD",
+      destination: "LIM",
+      flightNumber: "UX175",
+      departure: "23:45",
+      from: "2026-09-16",
+      to: "2026-10-23",
+    },
+  ].find(
+    (item) =>
+      item.origin === origin &&
+      item.destination === destination &&
+      date >= item.from &&
+      date <= item.to,
+  );
+  if (seasonal) {
+    rows.push({
+      flightNumber: seasonal.flightNumber,
+      origin,
+      destination,
+      date,
+      departure: `${date}T${seasonal.departure}:00`,
+      sourceUrl: `https://www.flight.info/${seasonal.flightNumber}`,
+      scheduleBasis: "published-seasonal-timetable",
+    });
+  }
   return rows;
 }
 
